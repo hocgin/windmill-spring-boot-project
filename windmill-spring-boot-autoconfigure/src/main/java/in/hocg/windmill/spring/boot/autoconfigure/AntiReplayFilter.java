@@ -46,13 +46,13 @@ public class AntiReplayFilter extends SimpleHandlerFilter {
                 || ignoreUrls.parallelStream().anyMatch((url) -> antPathMatcher.match(url, requestURI))) {
             return true;
         }
-    
+        
         Map<String, Object> parameterMap = getParams(servletWebRequest);
-    
+        
         String sign = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_SIGN);
         String timestampStr = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_TIMESTAMP);
         String nonce = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_NONCE);
-        Long timestamp = Long.parseLong(timestampStr);
+        Long timestamp = Objects.isNull(timestampStr) ? 0L : Long.parseLong(timestampStr);
         
         // sign, timestamp, nonce 必填
         if (Objects.isNull(sign)
@@ -101,7 +101,7 @@ public class AntiReplayFilter extends SimpleHandlerFilter {
     
     private Map<String, Object> getParams(RequestWrapper requestWrapper) {
         HashMap<String, Object> paramsMap = Maps.newHashMap();
-    
+        
         Map<String, String[]> parameterMap = requestWrapper.getParameterMap();
         String body = requestWrapper.getBody();
         Map<String, String[]> bodyMap = JSON.parseObject(body, Map.class);
@@ -120,7 +120,7 @@ public class AntiReplayFilter extends SimpleHandlerFilter {
         if (Objects.isNull(value)) {
             return null;
         }
-    
+        
         Object result;
         if (value.getClass().isArray()) {
             result = ((Object[]) value)[0];
