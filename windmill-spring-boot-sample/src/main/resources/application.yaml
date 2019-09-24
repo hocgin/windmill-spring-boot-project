@@ -1,0 +1,8 @@
+spring:
+  windmill:
+    anti-replay-interval: 5000
+    ignore-url:
+      - /ignore/*
+logging:
+  level:
+  - in.hocg: debug
