@@ -7,7 +7,7 @@ import in.hocg.windmill.spring.boot.autoconfigure.cache.DefaultAntiReplayCache;
 import in.hocg.windmill.spring.boot.autoconfigure.handle.AntiReplayHandle;
 import in.hocg.windmill.spring.boot.autoconfigure.properties.WindmillProperties;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.java.Log;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author hocgin
  */
-@Log
+@Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = WindmillProperties.PREFIX, name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(WindmillProperties.class)

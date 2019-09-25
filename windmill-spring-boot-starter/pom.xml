@@ -23,7 +23,7 @@
         </dependency>
 
         <dependency>
-            <groupId>in.hocg.windmill</groupId>
+            <groupId>${project.groupId}</groupId>
             <artifactId>windmill-spring-boot-autoconfigure</artifactId>
             <version>${revision}</version>
         </dependency>
