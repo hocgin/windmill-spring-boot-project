@@ -13,5 +13,5 @@ public class AntiReplayConstant {
     public static final String ANTI_REPLAY_PARAMETER_SIGN = "sign";
     public static final String ANTI_REPLAY_PARAMETER_TIMESTAMP = "timestamp";
     public static final String ANTI_REPLAY_PARAMETER_NONCE = "nonce";
-    public static final int ANTI_REPLAY_INTERVAL = 60 * 1000;
+    public static final Long ANTI_REPLAY_INTERVAL = 60 * 1000L;
 }

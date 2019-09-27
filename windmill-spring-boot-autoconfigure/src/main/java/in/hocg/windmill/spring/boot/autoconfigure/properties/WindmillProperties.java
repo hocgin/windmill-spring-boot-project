@@ -1,6 +1,7 @@
 package in.hocg.windmill.spring.boot.autoconfigure.properties;
 
 import com.google.common.collect.Lists;
+import in.hocg.windmill.spring.boot.autoconfigure.AntiReplayConstant;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
@@ -26,7 +27,7 @@ public class WindmillProperties {
     /**
      * 防重放的间隔时间, 默认: 60s
      */
-    private Long antiReplayInterval = 60 * 1000L;
+    private Long antiReplayInterval = AntiReplayConstant.ANTI_REPLAY_INTERVAL;
     
     /**
      * 忽略的 URL
