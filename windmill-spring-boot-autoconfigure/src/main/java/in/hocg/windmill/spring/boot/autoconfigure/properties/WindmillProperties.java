@@ -30,6 +30,11 @@ public class WindmillProperties {
     private Long antiReplayInterval = AntiReplayConstant.ANTI_REPLAY_INTERVAL;
     
     /**
+     * 匹配的 URL(默认所有)
+     */
+    private List<String> matchUrl = Lists.newArrayList("/**");
+    
+    /**
      * 忽略的 URL
      */
     private List<String> ignoreUrl = Lists.newArrayList();

@@ -2,18 +2,26 @@ package in.hocg.windmill.spring.boot.autoconfigure;
 
 
 import com.alibaba.fastjson.JSON;
-import com.google.common.collect.Maps;
+import com.alibaba.fastjson.JSONObject;
 import in.hocg.windmill.spring.boot.autoconfigure.cache.AntiReplayCache;
 import in.hocg.windmill.spring.boot.autoconfigure.handle.AntiReplayHandle;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.util.AntPathMatcher;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
 import javax.servlet.annotation.WebFilter;
-import java.util.*;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,37 +33,73 @@ import java.util.concurrent.TimeUnit;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RequiredArgsConstructor
 @WebFilter(filterName = "AntiReplayFilter", urlPatterns = {"/*"})
-public class AntiReplayFilter extends SimpleHandlerFilter {
+public class AntiReplayFilter extends OncePerRequestFilter {
     
     private final AntiReplayCache cacheService;
+    private final List<String> matchUrls;
     private final List<String> ignoreUrls;
     private final Long antiReplayInterval;
+    
+    @Getter
     private final AntiReplayHandle antiReplayHandle;
     
     private AntPathMatcher antPathMatcher = new AntPathMatcher();
     
+    
     @Override
-    public boolean preHandle(RequestWrapper servletWebRequest) {
-        String requestURI = servletWebRequest.getRequestURI();
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        final String uri = request.getRequestURI();
+        final String method = request.getMethod();
         
-        /*
-        - GET 请求不处理
-        - 满足匹配条件不处理
-         */
-        if (HttpMethod.GET.name().equalsIgnoreCase(servletWebRequest.getMethod())
-                || ignoreUrls.parallelStream().anyMatch((url) -> antPathMatcher.match(url, requestURI))) {
-            return true;
+        // 是 GET 请求
+        final boolean isGetRequest = HttpMethod.GET.name().equalsIgnoreCase(method);
+        
+        // 不满足匹配条件
+        final boolean isNoMatchUrl = matchUrls.stream().noneMatch((pattern) -> antPathMatcher.match(pattern, uri));
+        
+        // 满足忽略条件不处理
+        final boolean isIgnoreUrl = ignoreUrls.stream().anyMatch((url) -> antPathMatcher.match(url, uri));
+        if (isGetRequest
+                || isNoMatchUrl
+                || isIgnoreUrl) {
+            filterChain.doFilter(request, response);
+            return;
         }
         
-        Map<String, Object> parameterMap = getParams(servletWebRequest);
+        // 处理需要防范的请求
+        try {
+            final RequestWrapper requestWrapper = new RequestWrapper(request);
+            if (preHandle(requestWrapper)) {
+                filterChain.doFilter(request, response);
+            }
+        } catch (AntiReplayException e) {
+            AntiReplayHandle antiReplayHandle = getAntiReplayHandle();
+            if (Objects.isNull(antiReplayHandle)) {
+                log.error("请实现 {}, 否则无法处理重放错误信息.", AntiReplayHandle.class.getName());
+                return;
+            }
+            antiReplayHandle.handle(request, response, e);
+        }
+    }
+    
+    public boolean preHandle(RequestWrapper servletWebRequest) {
+        final String body = servletWebRequest.getBody();
+        final String sign = servletWebRequest.getHeader(AntiReplayConstant.ANTI_REPLAY_PARAMETER_SIGN);
+        String encode = Utils.sign(Utils.getOrDefault(body, ""));
         
-        String sign = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_SIGN);
-        String timestampStr = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_TIMESTAMP);
-        String nonce = getSingleValue(parameterMap, AntiReplayConstant.ANTI_REPLAY_PARAMETER_NONCE);
-        Long timestamp = Objects.isNull(timestampStr) ? 0L : Long.parseLong(timestampStr);
+        if (!encode.equals(sign)) {
+            log.debug(String.format("请求[%s] != 服务端[%s] 签名错误, 请检查sign字段及加密策略", sign, encode));
+            throw AntiReplayException.wrap("参数校验失败");
+        }
+        
+        final JSONObject bodyJson = JSON.parseObject(body);
+        final Long timestamp = bodyJson.getLong(AntiReplayConstant.ANTI_REPLAY_PARAMETER_TIMESTAMP);
+        final String nonce = bodyJson.getString(AntiReplayConstant.ANTI_REPLAY_PARAMETER_NONCE);
         
         // sign, timestamp, nonce 必填
-        if (Objects.isNull(sign)
+        if (Objects.isNull(timestamp)
                 || Objects.isNull(nonce)) {
             log.debug(String.format("必填: sign(%s), timestamp(%s), nonce(%s)", sign, timestamp, nonce));
             
@@ -79,56 +123,8 @@ public class AntiReplayFilter extends SimpleHandlerFilter {
             throw AntiReplayException.wrap("参数校验失败");
         }
         
-        // 验证 sign
-        String[] keys = parameterMap.keySet()
-                .toArray(new String[]{});
-        
-        // 格式: k=v&k=v&k=v, md5(k=v&k=v&k=v)
-        Optional<String> str = Arrays.stream(keys)
-                .filter(s -> !AntiReplayConstant.ANTI_REPLAY_PARAMETER_SIGN.equals(s))
-                .sorted()
-                .map(key -> String.format("%s=%s", key, parameterMap.get(key)))
-                .reduce((k1, k2) -> String.format("%s&%s", k1, k2));
-        String encode = Utils.sign(str.orElse(""));
-        if (!sign.equals(encode)) {
-            log.debug(String.format("请求[%s] != 服务端[%s] 签名错误, 请检查sign字段及加密策略", sign, encode));
-            throw AntiReplayException.wrap("参数校验失败");
-        }
-        
         cacheService.put(nonceKey, currentTimeMillis, endExpiredTimeMillis, TimeUnit.MILLISECONDS);
         return true;
-    }
-    
-    private Map<String, Object> getParams(RequestWrapper requestWrapper) {
-        HashMap<String, Object> paramsMap = Maps.newHashMap();
-        
-        Map<String, String[]> parameterMap = requestWrapper.getParameterMap();
-        String body = requestWrapper.getBody();
-        Map<String, String[]> bodyMap = JSON.parseObject(body, Map.class);
-        paramsMap.putAll(parameterMap);
-        paramsMap.putAll(bodyMap);
-        return paramsMap;
-    }
-    
-    @Override
-    AntiReplayHandle getAntiReplayHandle() {
-        return this.antiReplayHandle;
-    }
-    
-    private String getSingleValue(Map<String, Object> params, String key) {
-        Object value = params.get(key);
-        if (Objects.isNull(value)) {
-            return null;
-        }
-        
-        Object result;
-        if (value.getClass().isArray()) {
-            result = ((Object[]) value)[0];
-        } else {
-            result = value;
-        }
-        
-        return String.valueOf(result);
     }
     
 }

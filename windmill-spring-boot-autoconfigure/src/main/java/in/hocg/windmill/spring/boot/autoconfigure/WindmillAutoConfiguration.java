@@ -42,11 +42,12 @@ public class WindmillAutoConfiguration implements BeanFactoryPostProcessor,
     public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
         WindmillProperties properties = getProperties();
         List<String> ignoreUrls = properties.getIgnoreUrl();
+        List<String> matchUrl = properties.getMatchUrl();
         Long antiReplayInterval = properties.getAntiReplayInterval();
         AntiReplayHandle antiReplayHandle = beanFactory.getBean(AntiReplayHandle.class);
         beanFactory.registerSingleton(String.format(DEFAULT_BEAN_NAME_FORMATTER,
                 AntiReplayFilter.class.getName()),
-                new AntiReplayFilter(antiReplayCache(), ignoreUrls, antiReplayInterval, antiReplayHandle));
+                new AntiReplayFilter(antiReplayCache(), matchUrl, ignoreUrls, antiReplayInterval, antiReplayHandle));
     }
     
     @Override
