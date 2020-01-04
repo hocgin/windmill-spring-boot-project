@@ -3,3 +3,17 @@
 - 请求体格式为 JSON 格式
 - 客户端签名放入请求头 `sign`
 - 仅对请求体字符串进行 MD5 签名
+
+## 例子
+POST /example/handle
+
+Header:
+- sign: 813ab04c7214c3a14f44700aa791aa91
+
+Body:
+```json
+{
+    "nonce":1578106801925,
+    "timestamp":1578106801925
+}
+```
